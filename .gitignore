@@ -1,0 +1,62 @@
+# Python Basics
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments & Package Managers
+.venv/
+venv/
+ENV/
+.env
+.venv
+
+# IDEs & Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# PINN Specific
+*.npy
+*.npz
+*.csv
+*.mat
+*.h5
+
+# Model weights and checkpoints
+*.pth
+*.pt
+*.ckpt
+*.weights
+*.h5
+*.model
+
+# Output folders
+outputs/
+results/
+figures/
+plots/
+logs/
+tensorboard/
+
+# random
+*.ipynb
