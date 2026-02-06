@@ -52,7 +52,7 @@ ENV/
 
 # Output folders
 outputs/
-results/
+Results/
 figures/
 plots/
 logs/

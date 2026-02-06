@@ -1,42 +1,82 @@
-# Hydra configuration file
-# separate "control panel" file where you control running
-# how to train, how big batches are, scheduling
-
 # hydra configuration
 defaults :
-  - physicsnemo_default # start with default settings
-  - arch: # override default architecture and with "fully connected"
+  - physicsnemo_default
+  - arch:
       - fully_connected
-  - scheduler: tf_exponential_lr # set scheduler
-  - optimizer: adam # set optimizer
+  - scheduler: tf_exponential_lr
+  - optimizer: adam
   - loss: sum
   - _self_
 
-# controls learning rate schedule
-# every 4000 steps, learning rate is multiplied by 0.95
-# this means that early on in training, learning is aggressive
-# later on, learning is more conservative (stable convergence)
+jit: false
+
 scheduler:
   decay_rate: 0.95
   decay_steps: 4000
 
 # training control
 training:
-  rec_validation_freq: 1000 # how often openFOAM validation is evaluated
-  rec_inference_freq: 2000 # how often inference plots are produced
-  rec_monitor_freq: 1000 # how often losses are logged
-  rec_constraint_freq: 2000 # how often constraint wise losses are logged
-  max_steps : 10000 # total training iterations
+  rec_validation_freq: 1000
+  rec_inference_freq: 2000
+  rec_monitor_freq: 1000
+  rec_constraint_freq: 2000
+  max_steps : 200000
 
-# how many points are sampled per training set per constraint
 batch_size:
+  # boundary constraints
   NoSlipCavity: 1000
   NoSlipLedge: 100
   Symmetry: 1200
   Inlet: 100
   Outlet: 100
+
+  # interior pde
   Interior: 4000
 
-# graph architecture (don't really understand tbh)
+  # integral continuity
+  num_integral_continuity: 16
+  integral_continuity: 256
+
+  # supervised line-data constraint
+  LineData: 1024
+
+  # inferencer batch size
+  Inferencer: 8192
+
 graph:
   func_arch: true
+
+custom:
+  # keep PDE weighting near interface non-zero: w = w0 + sdf
+  w0: 0.05
+
+  # line-data weights (start here, tune later)
+  w_Hline1: 3.0
+  w_mid: 1.5
+  w_low: 1.0
+
+  # inferencer + plotting
+  use_inferencer: true # set true when you want plots
+  Nx_canyon: 129
+  Ny_canyon: 129
+  Nx_channel: 129
+  Ny_channel: 65
+
+  # plotting resolution
+  plot_grid_n: 140
+  quiver_stride: 16
+  stream_density: 1.2
+
+  # csv data
+  data:
+    use_line_data: true
+    restrict_to_canyon: true
+    max_points_per_line: 4000
+    downsample_method: "uniform"
+
+    Vline1_csv: "data/Vline1.csv"
+    Vline2_csv: "data/Vline2.csv"
+    Vline3_csv: "data/Vline3.csv"
+    Hline1_csv: "data/Hline1.csv"
+    Hline2_csv: "data/Hline2.csv"
+    Hline3_csv: "data/Hline3.csv"
