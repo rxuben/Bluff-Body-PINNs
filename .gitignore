@@ -50,13 +50,21 @@ ENV/
 *.h5
 *.model
 
-# Output folders
+# Other
 outputs/
-Results/
+results backup/
+results/
 figures/
 plots/
 logs/
 tensorboard/
+sweep_overnight.sh
+sweep_logs_*/
+sweep logs/
+jadidi code main/
+cmds.txt
+vtp_to_tecplot/
+post processing/
 
 # random
 *.ipynb

@@ -20,15 +20,15 @@ training:
   rec_inference_freq: 2000
   rec_monitor_freq: 1000
   rec_constraint_freq: 2000
-  max_steps : 200000
+  max_steps : 50000
 
 batch_size:
   # boundary constraints
-  NoSlipCavity: 1000
-  NoSlipLedge: 100
-  Symmetry: 1200
-  Inlet: 100
-  Outlet: 100
+  NoSlipCavity: 3000
+  NoSlipLedge: 500
+  Symmetry: 2000
+  Inlet: 250
+  Outlet: 250
 
   # interior pde
   Interior: 4000
@@ -73,6 +73,13 @@ custom:
     restrict_to_canyon: true
     max_points_per_line: 4000
     downsample_method: "uniform"
+
+    use_Vline1: true
+    use_Vline2: true
+    use_Vline3: true
+    use_Hline1: true
+    use_Hline2: true
+    use_Hline3: true
 
     Vline1_csv: "data/Vline1.csv"
     Vline2_csv: "data/Vline2.csv"

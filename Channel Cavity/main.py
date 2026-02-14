@@ -11,12 +11,13 @@ from physicsnemo.sym.solver import Solver
 from physicsnemo.sym.domain import Domain
 from physicsnemo.sym.key import Key
 from physicsnemo.sym.geometry.primitives_2d import Rectangle, Line
-from physicsnemo.sym.geometry import Parameterization, Parameter
 from physicsnemo.sym.domain.monitor import PointwiseMonitor
 from physicsnemo.sym.eq.pdes.navier_stokes import NavierStokes
 from physicsnemo.sym.eq.pdes.turbulence_zero_eq import ZeroEquation
 from physicsnemo.sym.eq.pdes.basic import NormalDotVec
 from physicsnemo.sym.domain.inferencer import PointwiseInferencer
+from physicsnemo.sym.domain.validator import PointwiseValidator
+from physicsnemo.sym.utils.io import (csv_to_dict)
 from physicsnemo.sym.domain.constraint import (
     PointwiseBoundaryConstraint,
     PointwiseInteriorConstraint,
@@ -24,7 +25,7 @@ from physicsnemo.sym.domain.constraint import (
 )
 
 # file imports (functions i've made)
-from plotting import CanyonFlowPlotter
+from plotting import CanyonFlowPlotter, MaskedValidatorPlotter
 from kwargs import compute_sdf_for_geom, _kwargs_for_init
 from supervised_functions import (
     load_line_csv_xyuv,
@@ -33,21 +34,22 @@ from supervised_functions import (
     add_line_data_constraint,
 )
 
-# copy either of the below lines into the terminal to open tensorboard
+# terminal commands to open tensorboard
 # tensorboard --logdir="./Channel Cavity/outputs" --port=7007
-# tensorboard --logdir="./Results" --port=7007
+# tensorboard --logdir="./results" --port=7007
+# tensorboard --logdir="../results backup" --port=7007
 
 @physicsnemo.sym.main(config_path="conf", config_name="config")
 def run(cfg: PhysicsNeMoConfig) -> None:
 
     # general dimensions and parameters
-    channel_height = float(0.75)
-    channel_length = float(6.0)
-    cavity_height = float(3.0)
-    cavity_width = float(3.0)
-    ledge = float( (channel_length - cavity_width) / 2 )
-    U_in = float(0.3)
-    V_in = float(0.0)
+    channel_height = 0.75
+    channel_length = 6.0
+    cavity_height = 3.0
+    cavity_width = 3.0
+    ledge = (channel_length - cavity_width) / 2
+    U_in = 0.3
+    V_in = 0.0
 
     # define sympy varaibles to parametize domain curves
     x, y = Symbol("x"), Symbol("y")
@@ -86,7 +88,7 @@ def run(cfg: PhysicsNeMoConfig) -> None:
         shuffle=False,
         drop_last=False,
         num_workers=0,
-        batch_per_epoch=1,
+        batch_per_epoch=1000,
     )
 
     ## Boundary conditions
@@ -226,7 +228,7 @@ def run(cfg: PhysicsNeMoConfig) -> None:
         V3 = downsample_line(load_line_csv_xyuv(v3), max_pts, method)
         H1 = downsample_line(load_line_csv_xyuv(h1), max_pts, method)
         H2 = downsample_line(load_line_csv_xyuv(h2), max_pts, method)
-        H6 = downsample_line(load_line_csv_xyuv(h3), max_pts, method)
+        H3 = downsample_line(load_line_csv_xyuv(h3), max_pts, method)
 
         if restrict:
             V1 = filter_to_cavity(V1, 0.0)
@@ -234,7 +236,7 @@ def run(cfg: PhysicsNeMoConfig) -> None:
             V3 = filter_to_cavity(V3, 0.0)
             H1 = filter_to_cavity(H1, 0.0)
             H2 = filter_to_cavity(H2, 0.0)
-            H6 = filter_to_cavity(H6, 0.0)
+            H3 = filter_to_cavity(H3, 0.0)
 
         # weights
         w_H1 = float(getattr(cfg.custom, "w_Hline1", 3.0))
@@ -243,14 +245,46 @@ def run(cfg: PhysicsNeMoConfig) -> None:
 
         bs_line = int(cfg.batch_size.LineData)
 
-        add_line_data_constraint(domain, nodes, "data_Vline1", V1, bs_line, w_low, shuffle=False)
-        add_line_data_constraint(domain, nodes, "data_Vline2", V2, bs_line, w_mid, shuffle=False)
-        add_line_data_constraint(domain, nodes, "data_Vline3", V3, bs_line, w_low, shuffle=False)
-        add_line_data_constraint(domain, nodes, "data_Hline1", H1, bs_line, w_H1, shuffle=False)
-        add_line_data_constraint(domain, nodes, "data_Hline2", H2, bs_line, w_mid, shuffle=False)
-        add_line_data_constraint(domain, nodes, "data_Hline6", H6, bs_line, w_low, shuffle=False)
+        line_configs = [
+            ("data_Vline1", V1, w_low, getattr(data_cfg, "use_Vline1", True)),
+            ("data_Vline2", V2, w_mid, getattr(data_cfg, "use_Vline2", True)),
+            ("data_Vline3", V3, w_low, getattr(data_cfg, "use_Vline3", True)),
+            ("data_Hline1", H1, w_H1, getattr(data_cfg, "use_Hline1", True)),
+            ("data_Hline2", H2, w_mid, getattr(data_cfg, "use_Hline2", True)),
+            ("data_Hline3", H3, w_low, getattr(data_cfg, "use_Hline3", True)),
+        ]
 
-        print(f"[INFO] Line data loaded (downsample max={max_pts}, method={method}, canyon_only={restrict}).", flush=True)
+        active_lines = []
+        for name, data, weight, enabled in line_configs:
+            if enabled:
+                add_line_data_constraint(domain, nodes, name, data, bs_line, weight, shuffle=False)
+                active_lines.append(name)
+
+        print(f"[INFO] Line data loaded (downsample max={max_pts}, method={method}, canyon_only={restrict}).",
+              flush=True)
+        print(f"[INFO] Active line constraints: {active_lines}", flush=True)
+
+    # validator
+    openfoam_file = to_absolute_path("openfoam/channelcavityCFD.csv")
+    if os.path.exists(openfoam_file):
+        # map OpenFOAM column names to PhysicsNeMo variable names
+        mapping = {"Points:0": "x", "Points:1": "y", "U:0": "u", "U:1": "v"}
+        openfoam_var = csv_to_dict(openfoam_file, mapping)
+
+        openfoam_invar  = {k: v for k, v in openfoam_var.items() if k in ["x", "y"]}
+        openfoam_outvar = {k: v for k, v in openfoam_var.items() if k in ["u", "v"]}
+
+        openfoam_validator = PointwiseValidator(
+            nodes=nodes,
+            invar=openfoam_invar,
+            true_outvar=openfoam_outvar,
+            batch_size=1024,
+            plotter=MaskedValidatorPlotter(max_triangle_size=0.05),
+        )
+        domain.add_validator(openfoam_validator, "openfoam_validator")
+        print("[INFO] OpenFOAM validator registered.", flush=True)
+    else:
+        print(f"[WARN] OpenFOAM CSV not found at {openfoam_file} – validator skipped.", flush=True)
 
     # measure and report how well the physics is being satisfied across the domain
     global_monitor = PointwiseMonitor(
