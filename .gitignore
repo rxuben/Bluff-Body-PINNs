@@ -52,11 +52,15 @@ ENV/
 
 # Output folders
 outputs/
-Results/
+results backup/
+results/
 figures/
 plots/
 logs/
 tensorboard/
+sweep_overnight.sh
+sweep_logs_*/
+jadidi code main/
 
 # random
 *.ipynb

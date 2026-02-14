@@ -22,9 +22,15 @@ from physicsnemo.sym.domain.constraint import (
     PointwiseInteriorConstraint,
     IntegralBoundaryConstraint,
 )
+from physicsnemo.sym.domain.validator import PointwiseValidator
+from physicsnemo.sym.utils.io import (
+    csv_to_dict,
+    ValidatorPlotter,
+    InferencerPlotter,
+)
 
 # file imports (functions i've made)
-from plotting import CanyonFlowPlotter
+from plotting import CanyonFlowPlotter, MaskedValidatorPlotter
 from kwargs import compute_sdf_for_geom, _kwargs_for_init
 from supervised_functions import (
     load_line_csv_xyuv,
@@ -33,21 +39,22 @@ from supervised_functions import (
     add_line_data_constraint,
 )
 
-# copy either of the below lines into the terminal to open tensorboard
+# terminal commands to open tensorboard
 # tensorboard --logdir="./Channel Cavity/outputs" --port=7007
-# tensorboard --logdir="./Results" --port=7007
+# tensorboard --logdir="./results" --port=7007
+# tensorboard --logdir="../results backup" --port=7007
 
 @physicsnemo.sym.main(config_path="conf", config_name="config")
 def run(cfg: PhysicsNeMoConfig) -> None:
 
     # general dimensions and parameters
-    channel_height = float(0.75)
-    channel_length = float(6.0)
-    cavity_height = float(3.0)
-    cavity_width = float(3.0)
-    ledge = float( (channel_length - cavity_width) / 2 )
-    U_in = float(0.3)
-    V_in = float(0.0)
+    channel_height = 0.75
+    channel_length = 6.0
+    cavity_height = 3.0
+    cavity_width = 3.0
+    ledge = (channel_length - cavity_width) / 2
+    U_in = 0.3
+    V_in = 0.0
 
     # define sympy varaibles to parametize domain curves
     x, y = Symbol("x"), Symbol("y")
@@ -251,6 +258,28 @@ def run(cfg: PhysicsNeMoConfig) -> None:
         add_line_data_constraint(domain, nodes, "data_Hline6", H6, bs_line, w_low, shuffle=False)
 
         print(f"[INFO] Line data loaded (downsample max={max_pts}, method={method}, canyon_only={restrict}).", flush=True)
+
+    # validator
+    openfoam_file = to_absolute_path("openfoam/channelcavityCFD.csv")
+    if os.path.exists(openfoam_file):
+        # map OpenFOAM column names to PhysicsNeMo variable names
+        mapping = {"Points:0": "x", "Points:1": "y", "U:0": "u", "U:1": "v"}
+        openfoam_var = csv_to_dict(openfoam_file, mapping)
+
+        openfoam_invar  = {k: v for k, v in openfoam_var.items() if k in ["x", "y"]}
+        openfoam_outvar = {k: v for k, v in openfoam_var.items() if k in ["u", "v"]}
+
+        openfoam_validator = PointwiseValidator(
+            nodes=nodes,
+            invar=openfoam_invar,
+            true_outvar=openfoam_outvar,
+            batch_size=1024,
+            plotter=MaskedValidatorPlotter(max_triangle_size=0.05),
+        )
+        domain.add_validator(openfoam_validator, "openfoam_validator")
+        print("[INFO] OpenFOAM validator registered.", flush=True)
+    else:
+        print(f"[WARN] OpenFOAM CSV not found at {openfoam_file} – validator skipped.", flush=True)
 
     # measure and report how well the physics is being satisfied across the domain
     global_monitor = PointwiseMonitor(

@@ -24,11 +24,11 @@ training:
 
 batch_size:
   # boundary constraints
-  NoSlipCavity: 1000
-  NoSlipLedge: 100
-  Symmetry: 1200
-  Inlet: 100
-  Outlet: 100
+  NoSlipCavity: 3000
+  NoSlipLedge: 500
+  Symmetry: 2000
+  Inlet: 250
+  Outlet: 250
 
   # interior pde
   Interior: 4000

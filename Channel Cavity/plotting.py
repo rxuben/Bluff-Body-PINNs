@@ -1,5 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.tri as tri
+from physicsnemo.sym.utils.io import ValidatorPlotter
 from physicsnemo.sym.utils.io.plotter import InferencerPlotter
 
 # Plotter: contour + quiver + streamlines
@@ -73,5 +75,46 @@ class CanyonFlowPlotter(InferencerPlotter):
             plt.xlabel("x"); plt.ylabel("y"); plt.title("Pressure p")
             plt.tight_layout()
             figs.append((f4, "pressure_contour"))
+
+        return figs
+
+class MaskedValidatorPlotter(ValidatorPlotter):
+    def __init__(self, max_triangle_size=0.05):
+        self.max_triangle_size = max_triangle_size
+
+    def __call__(self, invar, true_outvar, pred_outvar):
+        x = invar["x"].flatten()
+        y = invar["y"].flatten()
+
+        # build triangulation with mask
+        triang = tri.Triangulation(x, y)
+        triangles = triang.triangles
+        xT = x[triangles]
+        yT = y[triangles]
+        too_large = (
+            (np.max(xT, axis=1) - np.min(xT, axis=1) > self.max_triangle_size) |
+            (np.max(yT, axis=1) - np.min(yT, axis=1) > self.max_triangle_size)
+        )
+        triang.set_mask(too_large)
+
+        figs = []
+        for var in true_outvar:
+            true_vals = true_outvar[var].flatten()
+            pred_vals = pred_outvar[var].flatten()
+            diff_vals = pred_vals - true_vals
+
+            fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+            for ax, vals, title in zip(axes,
+                                       [true_vals, pred_vals, diff_vals],
+                                       [f"{var}_true", f"{var}_pred", f"{var}_diff"]):
+                tcf = ax.tricontourf(triang, vals, levels=50, cmap="jet")
+                plt.colorbar(tcf, ax=ax)
+                ax.set_title(title)
+                ax.set_xlabel("x")
+                ax.set_ylabel("y")
+                ax.set_aspect("equal")
+
+            plt.tight_layout()
+            figs.append((fig, var))
 
         return figs
